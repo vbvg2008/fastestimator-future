@@ -1,0 +1,9 @@
+README.md
+setup.py
+./fastestimator/__init__.py
+bin/fastestimator
+fastestimator.egg-info/PKG-INFO
+fastestimator.egg-info/SOURCES.txt
+fastestimator.egg-info/dependency_links.txt
+fastestimator.egg-info/requires.txt
+fastestimator.egg-info/top_level.txt
