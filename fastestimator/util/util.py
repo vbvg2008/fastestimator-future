@@ -33,3 +33,18 @@ def parse_string_to_python(val):
             return json.loads(val)
         except json.JSONDecodeError:
             return val
+
+
+def to_list(data):
+    """Convert data to a list.
+    Args:
+        data: Input data, with or without a python container.
+    Returns:
+        list: Replace python container with list or make input a list.
+    """
+    if not isinstance(data, list):
+        if isinstance(data, (tuple, set)):
+            data = list(data)
+        else:
+            data = [data]
+    return data
