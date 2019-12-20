@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from fastestimator.backend.cross_entropy import cross_entropy
 from fastestimator.op.op import TensorOp
-
-
 
 
 class CrossEntropy(TensorOp):
@@ -25,16 +24,11 @@ class CrossEntropy(TensorOp):
         outputs: key to store the computed loss value (not required under normal use cases)
         mode: 'train', 'eval', 'test', or None
     """
-    def __init__(self, inputs=None, outputs=None, mode=None):
+    def __init__(self, inputs=None, outputs=None, mode=None, apply_softmax=False):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
-
-        #maybe not using loss object is a better choice
-        self.loss_obj = tf.losses.BinaryCrossentropy(reduction='none', **kwargs)
+        self.apply_softmax = apply_softmax
 
     def forward(self, data, state):
-        true, pred = data
-        loss = self.loss_obj(true, pred)
-        loss_dim = len(loss.shape)
-        if loss_dim > 1:
-            loss = tf.reduce_mean(loss, axis=list(range(1, loss_dim)))
+        y_pred, y_true = data
+        loss = cross_entropy(y_pred, y_true, apply_softmax=self.apply_softmax)
         return loss

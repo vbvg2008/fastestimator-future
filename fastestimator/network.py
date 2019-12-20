@@ -15,7 +15,46 @@
 import tensorflow as tf
 import torch
 
+from fastestimator.op.tensorop.model.update import UpdateOp
 from fastestimator.util.util import to_list
+
+
+class Network:
+    """A class representing network operations for FastEstimator model training.
+    Args:
+        ops : Specifies the series of operations for training model
+    """
+    def __init__(self, ops):
+        self.ops = to_list(ops)
+
+    def run_step(self, batch, ops, state):
+        """Execute the ops in Network
+        Args:
+            batch : dictionary that contains batch data after the pipeline
+            ops : operation or list of operations
+            state : dictionary that contains meta data
+        Returns:
+            dictionary containing the predictions of current epoch
+        """
+        prediction = {}
+        batch = ChainMap(prediction, batch)
+        mode = state["mode"]
+        # use gradient tape for train, otherwise use a dummy tape
+        with tf.GradientTape(persistent=True) if mode == "train" else NonContext() as tape:
+            state['tape'] = tape
+            self._forward(batch, state, ops)
+        del state['tape']
+        del tape
+        return prediction
+
+    @staticmethod
+    def _forward(batch, state, ops):
+        data = None
+        for op in ops:
+            data = get_inputs_by_op(op, batch, data)
+            data = op.forward(data, state)
+            if op.outputs:
+                write_outputs_by_key(batch, data, op.outputs)
 
 
 def build(model_def, optimizer_def):

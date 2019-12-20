@@ -1,1 +1,3 @@
+from fastestimator.backend.cross_entropy import cross_entropy
 from fastestimator.backend.feed_forward import feed_forward
+from fastestimator.backend.update_model import update_model
