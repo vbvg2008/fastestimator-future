@@ -14,4 +14,6 @@
 # ==============================================================================
 __version__ = '1.0'
 
-from fastestimator.network import build
+from fastestimator.estimator import Estimator
+from fastestimator.network import Network, build
+from fastestimator.pipeline import Pipeline

@@ -16,6 +16,8 @@
 import json
 from ast import literal_eval
 
+from pyfiglet import Figlet
+
 
 def parse_string_to_python(val):
     """
@@ -58,3 +60,7 @@ class NonContext(object):
 
     def __exit__(self, *exc):
         pass
+
+
+def draw():
+    print(Figlet(font="slant").renderText("FastEstimator"))

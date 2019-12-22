@@ -12,21 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from fastestimator.backend.update_model import update_model
-from fastestimator.op import TensorOp
 
 
-class UpdateOp(TensorOp):
-    """This class performs updates to a model's weights based on the loss
-
-    Args:
-        model (tf.keras.Model or torch.nn.Module): model instance compiled by fe.build
-        loss (str): the name of loss
-    """
-    def __init__(self, model, loss_name, mode="train"):
-        super().__init__(inputs=loss_name, outputs=None, mode=mode)
-        self.model = model
-
-    def forward(self, data, state):
-        loss = data
-        update_model(self.model, loss, tape=state['tape'])
+class Pipeline:
+    def __init__(self):
+        pass

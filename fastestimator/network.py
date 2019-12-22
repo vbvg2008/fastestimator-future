@@ -17,7 +17,7 @@ from collections import ChainMap
 import tensorflow as tf
 import torch
 
-from fastestimator.op import get_inputs_by_op, get_op_from_mode, verify_ops, write_outputs_by_key
+from fastestimator.op.op import get_inputs_by_op, get_op_from_mode, write_outputs_by_key
 from fastestimator.op.tensorop.model.model import ModelOp
 from fastestimator.op.tensorop.model.update import UpdateOp
 from fastestimator.util.util import NonContext, to_list
