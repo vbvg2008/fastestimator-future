@@ -48,3 +48,13 @@ def to_list(data):
         else:
             data = [data]
     return data
+
+
+class NonContext(object):
+    """A class which is used for nothing.
+    """
+    def __enter__(self):
+        pass
+
+    def __exit__(self, *exc):
+        pass

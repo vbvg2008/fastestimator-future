@@ -12,11 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from collections import ChainMap
+
 import tensorflow as tf
 import torch
 
+from fastestimator.op import get_inputs_by_op, get_op_from_mode, verify_ops, write_outputs_by_key
+from fastestimator.op.tensorop.model.model import ModelOp
 from fastestimator.op.tensorop.model.update import UpdateOp
-from fastestimator.util.util import to_list
+from fastestimator.util.util import NonContext, to_list
 
 
 class Network:
@@ -26,6 +30,11 @@ class Network:
     """
     def __init__(self, ops):
         self.ops = to_list(ops)
+        self.framework = None
+        self.exported_keys = []
+
+    def prepare(self):
+        self._check_model()
 
     def run_step(self, batch, ops, state):
         """Execute the ops in Network
@@ -36,16 +45,31 @@ class Network:
         Returns:
             dictionary containing the predictions of current epoch
         """
+        buffer = {}
         prediction = {}
-        batch = ChainMap(prediction, batch)
+        batch = ChainMap(buffer, batch)
         mode = state["mode"]
-        # use gradient tape for train, otherwise use a dummy tape
-        with tf.GradientTape(persistent=True) if mode == "train" else NonContext() as tape:
+        # use gradient tape for tensorflow train, otherwise use a dummy tape
+        with tf.GradientTape(
+                persistent=True) if mode == "train" and self.framework == "tensorflow" else NonContext() as tape:
             state['tape'] = tape
             self._forward(batch, state, ops)
         del state['tape']
         del tape
+        for key in self.exported_keys:
+            prediction[key] = buffer[key]
         return prediction
+
+    def _check_model(self):
+        frameworks = []
+        for op in self.ops:
+            if isinstance(op, (ModelOp, UpdateOp)):
+                if isinstance(op.model, tf.keras.Model):
+                    frameworks.append("tensorflow")
+                elif isinstance(op.model, torch.nn.Module):
+                    frameworks.append("pytorch")
+        assert len(set(frameworks)) == 1, "please make sure either tensorflow or torch model is used in network"
+        self.framework = frameworks.pop()
 
     @staticmethod
     def _forward(batch, state, ops):
