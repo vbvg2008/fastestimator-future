@@ -18,7 +18,7 @@ import tensorflow as tf
 import torch
 
 from fastestimator.pipeline import Pipeline
-from fastestimator.util.util import draw
+from fastestimator.util.util import draw, to_list
 
 
 class Estimator:
@@ -31,18 +31,27 @@ class Estimator:
         network (obj): Network object that defines models and their external connection. It should be an instance of
             `fastestimator.network.network.Network`
         epochs (int): Number of epooch to run.
-        steps_per_epoch ([type], optional): Number of steps to run for each training session. If None, this will be the
+        steps_per_epoch (int, optional): Number of steps to run for each training session. If None, this will be the
             training example number divided by batch_size. (round down). Defaults to None.
-        validation_steps ([type], optional): Number of steps to run for each evaluation session, If None, this will be
+        validation_steps (int, optional): Number of steps to run for each evaluation session, If None, this will be
             the evaluation example number divided by batch_size (round down). Defaults to None.
         traces (list, optional): List of the traces objects to run during training. If None, there will be only basic
             traces.
         log_steps (int, optional): Interval steps of logging. Defaults to 100.
     """
-    def __init__(self, pipeline, network, epochs, traces=None, log_steps=100):
+    def __init__(self,
+                 pipeline,
+                 network,
+                 epochs,
+                 steps_per_epoch=None,
+                 validation_steps=None,
+                 traces=None,
+                 log_steps=100):
         self.pipeline = pipeline
         self.network = network
         self.epochs = epochs
+        self.steps_per_epoch = steps_per_epoch
+        self.validation_steps = validation_steps
         self.traces = traces
         self.log_steps = log_steps
         assert log_steps is None or log_steps > 0, "log_steps must be positive or None"
@@ -65,5 +74,8 @@ class Estimator:
         self.network.prepare()
 
     def _prepare_estimator(self):
-        pass
-    
+        if self.traces is None:
+            self.traces = []
+        else:
+            self.traces = to_list(self.traces)
+        
