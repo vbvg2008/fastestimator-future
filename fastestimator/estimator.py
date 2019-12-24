@@ -39,32 +39,23 @@ class Estimator:
             traces.
         log_steps (int, optional): Interval steps of logging. Defaults to 100.
     """
-    def __init__(self,
-                 pipeline,
-                 network,
-                 epochs,
-                 steps_per_epoch=None,
-                 validation_steps=None,
-                 traces=None,
-                 log_steps=100):
+    def __init__(self, pipeline, network, epochs, steps_per_epoch=None, traces=None, log_steps=100):
         self.pipeline = pipeline
         self.network = network
         self.epochs = epochs
         self.steps_per_epoch = steps_per_epoch
-        self.validation_steps = validation_steps
         self.traces = traces
         self.log_steps = log_steps
         assert log_steps is None or log_steps > 0, "log_steps must be positive or None"
-        self.summary = False
+        self.summary = None
 
     def fit(self, summary=None):
         draw()
         self.summary = summary
+        self._prepare_estimator()
         if isinstance(self.pipeline, Pipeline):
             self._prepare_pipeline()
         self._prepare_network()
-        self._warmup()
-        self._prepare_estimator()
         return self._start()
 
     def _prepare_pipeline(self):
@@ -76,6 +67,5 @@ class Estimator:
     def _prepare_estimator(self):
         if self.traces is None:
             self.traces = []
-        else:
-            self.traces = to_list(self.traces)
+        self.traces = to_list(self.traces)
         

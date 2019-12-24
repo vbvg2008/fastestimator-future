@@ -15,5 +15,8 @@
 
 
 class Pipeline:
-    def __init__(self):
-        pass
+    def __init__(train_data, eval_data=None, batch_size=None, ops=None):
+        self.train_data = train_data
+        self.eval_data = eval_data
+        self.batch_size = batch_size
+        self.ops = ops
