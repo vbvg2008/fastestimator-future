@@ -18,7 +18,8 @@ import tensorflow as tf
 import torch
 
 from fastestimator.pipeline import Pipeline
-from fastestimator.util.util import draw, to_list
+from fastestimator.trace.trace import TrainEssential
+from fastestimator.util.util import draw, get_num_devices, to_list
 
 
 class Estimator:
@@ -33,13 +34,12 @@ class Estimator:
         epochs (int): Number of epooch to run.
         steps_per_epoch (int, optional): Number of steps to run for each training session. If None, this will be the
             training example number divided by batch_size. (round down). Defaults to None.
-        validation_steps (int, optional): Number of steps to run for each evaluation session, If None, this will be
-            the evaluation example number divided by batch_size (round down). Defaults to None.
         traces (list, optional): List of the traces objects to run during training. If None, there will be only basic
             traces.
         log_steps (int, optional): Interval steps of logging. Defaults to 100.
+        monitor_names (str, list): Additional keys to print in logger
     """
-    def __init__(self, pipeline, network, epochs, steps_per_epoch=None, traces=None, log_steps=100):
+    def __init__(self, pipeline, network, epochs, steps_per_epoch=None, traces=None, log_steps=100, monitor_names=None):
         self.pipeline = pipeline
         self.network = network
         self.epochs = epochs
@@ -47,25 +47,81 @@ class Estimator:
         self.traces = traces
         self.log_steps = log_steps
         assert log_steps is None or log_steps > 0, "log_steps must be positive or None"
+        self.monitor_names = monitor_names
         self.summary = None
 
     def fit(self, summary=None):
         draw()
         self.summary = summary
         self._prepare_estimator()
+        self._prepare_network()
         if isinstance(self.pipeline, Pipeline):
             self._prepare_pipeline()
-        self._prepare_network()
         return self._start()
 
     def _prepare_pipeline(self):
         pass
 
     def _prepare_network(self):
-        self.network.prepare()
+        self.network.exported_keys = self.network.op_outputs.intersection(self.trace_inputs)
 
     def _prepare_estimator(self):
+        self._prepare_system()
+        self._prepare_trace()
+
+    def _prepare_system(self):
+        self.system = System(mode="train",
+                             global_step=0,
+                             num_devices=get_num_devices(),
+                             log_steps=self.log_steps,
+                             persist_summary=self.summary,
+                             total_epochs=self.epochs,
+                             total_steps=None,
+                             epoch_idx=0,
+                             batch_idx=0,
+                             batch_size=None)
+
+    def _prepare_traces(self):
         if self.traces is None:
             self.traces = []
         self.traces = to_list(self.traces)
-        
+        self.traces.insert(0, TrainEssential())
+        self.traces.append(Logger())
+        self.trace_inputs = set()
+        for trace in self.traces:
+            self.trace_inputs = self.trace_inputs.union(set(filter(None, to_list(trace.inputs))))
+
+
+class System:
+    def __init__(self,
+                 mode,
+                 global_step,
+                 num_devices,
+                 log_steps,
+                 persist_summary,
+                 total_epochs,
+                 total_steps,
+                 epoch_idx,
+                 batch_idx,
+                 batch_size):
+        self.mode = mode
+        self.global_step = global_step
+        self.num_devices = num_devices
+        self.log_steps = log_steps
+        self.persist_summary = persist_summary
+        self.total_epochs = total_epochs
+        self.total_steps = total_steps
+        self.epoch_idx = epoch_idx
+        self.batch_idx = batch_idx
+        self.batch_size = batch_size
+        self.buffer = {}
+
+    def add_buffer(self, key, value):
+        self.buffer[key] = value
+
+    def get_buffer(self, key):
+        return self.buffer[key]
+
+    def clear_buffer(self):
+        del self.buffer
+        self.buffer = {}

@@ -31,10 +31,20 @@ class Network:
     def __init__(self, ops):
         self.ops = to_list(ops)
         self.framework = None
-        self.exported_keys = []
+        self.exported_keys = set()
+        self.op_outputs = set()
+        self._initial_check()
+
+    def _initial_check(self):
+        self._check_model()
+        self._check_ops()
+
+    def _check_ops(self):
+        for op in self.ops:
+            self.op_outputs = self.op_outputs.union(set(filter(None, to_list(op.outputs))))
 
     def prepare(self):
-        self._check_model()
+        pass
 
     def run_step(self, batch, ops, state):
         """Execute the ops in Network

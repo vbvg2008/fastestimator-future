@@ -64,3 +64,13 @@ class NonContext(object):
 
 def draw():
     print(Figlet(font="slant").renderText("FastEstimator"))
+
+
+def get_num_devices():
+    try:
+        result = subprocess.run(['nvidia-smi', '-q'], stdout=subprocess.PIPE).stdout.decode('utf-8')
+        lines = [line.split() for line in result.splitlines() if line.startswith("Attached GPUs")]
+        num_devices = int(lines[0][-1])
+    except:
+        num_devices = 1
+    return num_devices
