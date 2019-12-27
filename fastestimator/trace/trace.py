@@ -49,7 +49,7 @@ class Trace:
     def on_epoch_end(self):
         """Runs at the end of each epoch
         """
-    def on_end(self, state):
+    def on_end(self):
         """Runs once at the end training.
         """
 
@@ -85,13 +85,45 @@ class TrainEssential(Trace):
     def on_epoch_end(self):
         self.elapse_times.append(time.perf_counter() - self.time_start)
 
-    def on_end(self, state):
+    def on_end(self):
         self.system.add_buffer("total_time", "{} sec".format(round(time.perf_counter() - self.train_start, 2)))
 
 
 class Logger(Trace):
-    def __init__(self, log_names):
+    """Trace that prints log, please don't add this trace into an estimator manually.
+
+    Args:
+        monitor_names (set): set of keys to print from system buffer
+    """
+    def __init__(self, monitor_names):
         super().__init__()
+        self.monitor_names = monitor_names
         self.system = None
 
-    
+    def on_begin(self):
+        self._print_message("FastEstimator-Start: step: {}; ".format(self.system.global_step))
+
+    def on_batch_end(self, data):
+        if self.system.mode == "train" and self.system.global_step % self.system.log_steps == self.system.log_steps - 1:
+            self._print_message("FastEstimator-Train: step: {}; ".format(self.system.global_step))
+
+    def on_epoch_end(self):
+        if self.system.mode == "eval":
+            self._print_message("FastEstimator-Eval: step: {}; ".format(self.system.global_step), True)
+
+    def on_end(self):
+        self._print_message("FastEstimator-Finish: step: {}; ".format(self.system.global_step))
+
+    def _print_message(self, header, log_epoch=False):
+        log_message = header
+        if log_epoch:
+            log_message += "epoch: {}; ".format(self.system.epoch_idx)
+        for key, val in self.system.buffer.items():
+            if key in self.monitor_names:
+                if hasattr(val, "numpy"):
+                    val = val.numpy()
+                if isinstance(val, np.ndarray):
+                    log_message += "\n{}:\n{};".format(key, np.array2string(val, separator=','))
+                else:
+                    log_message += "{}: {}; ".format(key, str(val))
+        print(log_message)

@@ -18,7 +18,7 @@ import tensorflow as tf
 import torch
 
 from fastestimator.pipeline import Pipeline
-from fastestimator.trace.trace import TrainEssential
+from fastestimator.trace.trace import Logger, TrainEssential
 from fastestimator.util.util import draw, get_num_devices, to_list
 
 
@@ -48,11 +48,10 @@ class Estimator:
         self.log_steps = log_steps
         assert log_steps is None or log_steps > 0, "log_steps must be positive or None"
         self.monitor_names = monitor_names
-        self.summary = None
+        self.trace_inputs = set()
 
-    def fit(self, summary=None):
+    def fit(self):
         draw()
-        self.summary = summary
         self._prepare_estimator()
         self._prepare_network()
         if isinstance(self.pipeline, Pipeline):
@@ -67,29 +66,31 @@ class Estimator:
 
     def _prepare_estimator(self):
         self._prepare_system()
-        self._prepare_trace()
+        self._prepare_traces()
 
     def _prepare_system(self):
         self.system = System(mode="train",
                              global_step=0,
                              num_devices=get_num_devices(),
                              log_steps=self.log_steps,
-                             persist_summary=self.summary,
                              total_epochs=self.epochs,
                              total_steps=None,
                              epoch_idx=0,
-                             batch_idx=0,
-                             batch_size=None)
+                             batch_idx=0)
 
     def _prepare_traces(self):
         if self.traces is None:
             self.traces = []
         self.traces = to_list(self.traces)
         self.traces.insert(0, TrainEssential())
-        self.traces.append(Logger())
-        self.trace_inputs = set()
+        self.monitor_names = set(filter(None, to_list(self.monitor_names)))
         for trace in self.traces:
             self.trace_inputs = self.trace_inputs.union(set(filter(None, to_list(trace.inputs))))
+            self.monitor_names = self.monitor_names.union(set(filter(None, to_list(trace.log_names))))
+        self.traces.append(Logger(self.monitor_names))
+
+    def _start(self):
+        pass
 
 
 class System:
@@ -98,29 +99,22 @@ class System:
                  global_step,
                  num_devices,
                  log_steps,
-                 persist_summary,
                  total_epochs,
                  total_steps,
                  epoch_idx,
-                 batch_idx,
-                 batch_size):
+                 batch_idx):
         self.mode = mode
         self.global_step = global_step
         self.num_devices = num_devices
         self.log_steps = log_steps
-        self.persist_summary = persist_summary
         self.total_epochs = total_epochs
         self.total_steps = total_steps
         self.epoch_idx = epoch_idx
         self.batch_idx = batch_idx
-        self.batch_size = batch_size
         self.buffer = {}
 
     def add_buffer(self, key, value):
         self.buffer[key] = value
-
-    def get_buffer(self, key):
-        return self.buffer[key]
 
     def clear_buffer(self):
         del self.buffer
