@@ -32,8 +32,7 @@ class Estimator:
         network (obj): Network object that defines models and their external connection. It should be an instance of
             `fastestimator.network.network.Network`
         epochs (int): Number of epooch to run.
-        steps_per_epoch (int, optional): Number of steps to run for each training session. If None, this will be the
-            training example number divided by batch_size. (round down). Defaults to None.
+        steps_per_epoch (int, optional): Number of steps to run for each epoch.
         traces (list, optional): List of the traces objects to run during training. If None, there will be only basic
             traces.
         log_steps (int, optional): Interval steps of logging. Defaults to 100.
@@ -54,12 +53,18 @@ class Estimator:
         draw()
         self._prepare_estimator()
         self._prepare_network()
-        if isinstance(self.pipeline, Pipeline):
-            self._prepare_pipeline()
+        self._prepare_pipeline()
         return self._start()
 
     def _prepare_pipeline(self):
-        pass
+        assert isinstance(self.pipeline, (tf.data.Dataset, Pipeline, torch.utils.data.DataLoader)), "please provide \
+            one of the following: fe.Pipeline, tf.data.Dataset or torch.utils.data.DataLoader"
+
+        if isinstance(self.pipeline, tf.data.Dataset):
+            assert self.steps_per_epoch, "must provide steps_per_epoch expicity when using tensorflow Dataset"
+        elif self.steps_per_epoch is None:
+            self.steps_per_epoch = len(self.pipeline)
+        self.system.total_steps = self.epochs * self.steps_per_epoch
 
     def _prepare_network(self):
         self.network.exported_keys = self.network.op_outputs.intersection(self.trace_inputs)
@@ -94,15 +99,7 @@ class Estimator:
 
 
 class System:
-    def __init__(self,
-                 mode,
-                 global_step,
-                 num_devices,
-                 log_steps,
-                 total_epochs,
-                 total_steps,
-                 epoch_idx,
-                 batch_idx):
+    def __init__(self, mode, global_step, num_devices, log_steps, total_epochs, total_steps, epoch_idx, batch_idx):
         self.mode = mode
         self.global_step = global_step
         self.num_devices = num_devices
