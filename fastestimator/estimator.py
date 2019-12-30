@@ -20,6 +20,7 @@ import torch
 from fastestimator.pipeline import Pipeline
 from fastestimator.trace.trace import Logger, TrainEssential
 from fastestimator.util.util import draw, get_num_devices, to_list
+from fastestimator.op.op import get_inputs_by_key
 
 
 class Estimator:
@@ -70,8 +71,8 @@ class Estimator:
         self.network.exported_keys = self.network.op_outputs.intersection(self.trace_inputs)
 
     def _prepare_estimator(self):
-        self._prepare_system()
         self._prepare_traces()
+        self._prepare_system()
 
     def _prepare_system(self):
         self.system = System(mode="train",
@@ -82,6 +83,8 @@ class Estimator:
                              total_steps=None,
                              epoch_idx=0,
                              batch_idx=0)
+        for trace in self.traces:
+            trace.system = self.system
 
     def _prepare_traces(self):
         if self.traces is None:
@@ -95,7 +98,49 @@ class Estimator:
         self.traces.append(Logger(self.monitor_names))
 
     def _start(self):
-        pass
+        self._run_traces_on_begin()
+        for self.system.epoch_idx in range(self.epochs):
+            self.system.mode = "train"
+            self.run_epoch()
+            
+
+
+
+    def _run_traces_on_begin(self):
+        for trace in self.traces:
+            trace.on_begin()
+        self.system.clear_buffer()
+
+    def _run_traces_on_epoch_begin(self):
+        for trace in self.traces:
+            if trace.mode is None or self.system.mode in trace.mode:
+                trace.on_epoch_begin()
+        self.system.clear_buffer()
+
+    def _run_traces_on_batch_begin(self):
+        for trace in self.traces:
+            if trace.mode is None or self.system.mode in trace.mode:
+                trace.on_batch_begin()
+        self.system.clear_buffer()
+
+    def _run_traces_on_batch_end(self, batch, prediction):
+        batch = ChainMap(prediction, batch)
+        for trace in self.traces:
+            if trace.mode is None or self.system.mode in trace.mode:
+                data = get_inputs_by_key(batch, trace.inputs)
+                trace.on_batch_end(data)
+        self.system.clear_buffer()
+    
+    def _run_traces_on_epoch_end(self):
+        for trace in self.traces:
+            if trace.mode is None or self.system.mode in trace.mode:
+                trace.on_epoch_end()
+        self.system.clear_buffer()
+    
+    def _run_traces_on_end(self):
+        for trace in self.traces:
+            trace.on_end()
+        self.system.clear_buffer()
 
 
 class System:
