@@ -21,7 +21,7 @@ from fastestimator.op.op import get_inputs_by_op, get_op_from_mode, write_output
 from fastestimator.op.tensorop.model.model import ModelOp
 from fastestimator.op.tensorop.model.update import UpdateOp
 from fastestimator.util.util import NonContext, to_list
-
+import pdb
 
 class Network:
     """A class representing network operations for FastEstimator model training.
@@ -46,28 +46,41 @@ class Network:
     def prepare(self):
         pass
 
-    def run_step(self, batch, ops, state):
+    def run_step(self, batch, state):
         """Execute the ops in Network
         Args:
             batch : dictionary that contains batch data after the pipeline
-            ops : operation or list of operations
             state : dictionary that contains meta data
         Returns:
             dictionary containing the predictions of current epoch
         """
-        buffer = {}
+        batch = ChainMap({}, batch)
+        if self.framework == "tensorflow":
+            prediction = self._forward_tensorflow(batch, state, self.ops, to_list(self.exported_keys))
+        else:
+            prediction = self._forward_pytorch(batch, state, self.ops, self.exported_keys)
+        return prediction
+    
+    def _forward_pytorch(self, batch, state, ops, exported_keys):
         prediction = {}
-        batch = ChainMap(buffer, batch)
+        state['tape'] = None
+        self._forward(batch, state, ops)
+        for key in exported_keys:
+            prediction[key] = batch[key]
+        return prediction
+
+    # @tf.function
+    def _forward_tensorflow(self, batch, state, ops, exported_keys):
+        prediction = {}
         mode = state["mode"]
         # use gradient tape for tensorflow train, otherwise use a dummy tape
-        with tf.GradientTape(
-                persistent=True) if mode == "train" and self.framework == "tensorflow" else NonContext() as tape:
+        with tf.GradientTape(persistent=True) if mode == "train" else NonContext() as tape:
             state['tape'] = tape
             self._forward(batch, state, ops)
         del state['tape']
         del tape
-        for key in self.exported_keys:
-            prediction[key] = buffer[key]
+        for key in exported_keys:
+            prediction[key] = batch[key]
         return prediction
 
     def _check_model(self):
