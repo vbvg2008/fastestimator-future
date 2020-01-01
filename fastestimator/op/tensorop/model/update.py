@@ -28,5 +28,4 @@ class UpdateOp(TensorOp):
         self.model = model
 
     def forward(self, data, state):
-        loss = data
-        update_model(self.model, loss, tape=state['tape'])
+        update_model(self.model, data, tape=state['tape'])

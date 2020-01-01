@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import pdb
 from collections import ChainMap
 
 import tensorflow as tf
 import torch
 
-from fastestimator.pipeline import Pipeline
-from fastestimator.trace.trace import Logger, TrainEssential
-from fastestimator.util.util import draw, get_num_devices, to_list
 from fastestimator.op.op import get_inputs_by_key
 from fastestimator.op.tensorop.model import UpdateOp
-import pdb
+from fastestimator.pipeline import Pipeline
+from fastestimator.trace.trace import EvalEssential, Logger, TrainEssential
+from fastestimator.util.util import draw, get_num_devices, to_list
+
 
 class Estimator:
     """Estimator is the highest level class that user can directly use for traning a model (estimator.fit). It wraps
@@ -51,6 +52,7 @@ class Estimator:
         self.monitor_names = monitor_names
         self.trace_inputs = set()
         self.do_eval = False
+        self.system = None
 
     def fit(self):
         draw()
@@ -61,16 +63,16 @@ class Estimator:
 
     def _prepare_pipeline(self):
         if isinstance(self.pipeline.train_data, tf.data.Dataset):
-            assert self.steps_per_epoch, "must provide steps_per_epoch expicity when using tensorflow Dataset for training"
+            assert self.steps_per_epoch, "must provide steps_per_epoch expicity with tensorflow Dataset"
         elif self.steps_per_epoch is None:
             self.steps_per_epoch = len(self.pipeline)
         self.system.total_steps = self.epochs * self.steps_per_epoch
-        self.do_eval = bool(self.pipeline.eval_data)
 
     def _prepare_network(self):
         self.network.exported_keys = self.network.op_outputs.intersection(self.trace_inputs)
 
     def _prepare_estimator(self):
+        self.do_eval = bool(self.pipeline.eval_data)
         self._prepare_traces()
         self._prepare_system()
 
@@ -88,21 +90,25 @@ class Estimator:
             trace.system = self.system
 
     def _prepare_traces(self):
+        loss_keys = self._initialize_loss_keys()
         if self.traces is None:
             self.traces = []
         self.traces = to_list(self.traces)
-        self.traces.insert(0, TrainEssential())
-        self.monitor_names = set(filter(None, to_list(self.monitor_names)))
-        self._initialize_trace_inputs()
+        self.monitor_names = set(filter(None, to_list(self.monitor_names))).union(loss_keys)
+        self.traces.insert(0, TrainEssential(monitor_names=self.monitor_names))
+        if self.do_eval:
+            self.traces.append(EvalEssential(loss_keys=loss_keys))
         for trace in self.traces:
             self.trace_inputs = self.trace_inputs.union(set(filter(None, to_list(trace.inputs))))
             self.monitor_names = self.monitor_names.union(set(filter(None, to_list(trace.log_names))))
         self.traces.append(Logger(self.monitor_names))
 
-    def _initialize_trace_inputs(self):
+    def _initialize_loss_keys(self):
+        loss_keys = set()
         for op in self.network.ops:
             if isinstance(op, UpdateOp):
-                self.trace_inputs = self.trace_inputs.union(set(to_list(op.inputs)))
+                loss_keys = loss_keys.union(set(to_list(op.inputs)))
+        return loss_keys
 
     def _start(self):
         self._run_traces_on_begin()
@@ -112,19 +118,22 @@ class Estimator:
             if self.do_eval:
                 self.system.mode = "eval"
                 self._run_epoch()
+            self.system.update_epoch_idx()
         self._run_traces_on_end()
-    
+
     def _run_epoch(self):
         self._run_traces_on_epoch_begin()
+        self.system.batch_size = self.pipeline.get_batch_size(self.system.epoch_idx)
         ds_iter = self.pipeline.get_iterator(self.system.mode)
         for self.system.batch_idx, batch in enumerate(ds_iter):
-            self.system.batch_size = self.pipeline.get_batch_size(self.system.epoch_idx)
+            if self.system.batch_idx == self.steps_per_epoch and self.system.mode == "train":
+                break
             self._run_traces_on_batch_begin()
             prediction = self.network.run_step(batch, {"mode": self.system.mode, "epoch": self.system.epoch_idx})
             self._run_traces_on_batch_end(batch, prediction)
-            self.system.update_global_step()
+            if self.system.mode == "train":
+                self.system.update_global_step()
         self._run_traces_on_epoch_end()
-        self.system.update_epoch_idx()
 
     def _run_traces_on_begin(self):
         for trace in self.traces:
@@ -153,13 +162,13 @@ class Estimator:
                     data = None
                 trace.on_batch_end(data)
         self.system.clear_buffer()
-    
+
     def _run_traces_on_epoch_end(self):
         for trace in self.traces:
             if trace.mode is None or self.system.mode in trace.mode:
                 trace.on_epoch_end()
         self.system.clear_buffer()
-    
+
     def _run_traces_on_end(self):
         for trace in self.traces:
             trace.on_end()
@@ -167,7 +176,16 @@ class Estimator:
 
 
 class System:
-    def __init__(self, mode, global_step, batch_size, num_devices, log_steps, total_epochs, total_steps, epoch_idx, batch_idx):
+    def __init__(self,
+                 mode,
+                 global_step,
+                 batch_size,
+                 num_devices,
+                 log_steps,
+                 total_epochs,
+                 total_steps,
+                 epoch_idx,
+                 batch_idx):
         self.mode = mode
         self.global_step = global_step
         self.batch_size = batch_size
@@ -186,10 +204,11 @@ class System:
         del self.buffer
         self.buffer = {}
 
+    def read_buffer(self, key):
+        return self.buffer[key]
+
     def update_epoch_idx(self):
-        if self.mode == "train":
-            self.epoch_idx += 1
-    
+        self.epoch_idx += 1
+
     def update_global_step(self):
-        if self.mode == "train":
-            self.global_step += 1
+        self.global_step += 1

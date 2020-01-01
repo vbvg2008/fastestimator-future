@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import pdb
 from collections import ChainMap
 
 import tensorflow as tf
@@ -21,7 +22,7 @@ from fastestimator.op.op import get_inputs_by_op, get_op_from_mode, write_output
 from fastestimator.op.tensorop.model.model import ModelOp
 from fastestimator.op.tensorop.model.update import UpdateOp
 from fastestimator.util.util import NonContext, to_list
-import pdb
+
 
 class Network:
     """A class representing network operations for FastEstimator model training.
@@ -55,12 +56,13 @@ class Network:
             dictionary containing the predictions of current epoch
         """
         batch = ChainMap({}, batch)
+        ops = get_op_from_mode(self.ops, state["mode"])
         if self.framework == "tensorflow":
-            prediction = self._forward_tensorflow(batch, state, self.ops, to_list(self.exported_keys))
+            prediction = self._forward_tensorflow(batch, state, ops, to_list(self.exported_keys))
         else:
-            prediction = self._forward_pytorch(batch, state, self.ops, self.exported_keys)
+            prediction = self._forward_pytorch(batch, state, ops, self.exported_keys)
         return prediction
-    
+
     def _forward_pytorch(self, batch, state, ops, exported_keys):
         prediction = {}
         state['tape'] = None

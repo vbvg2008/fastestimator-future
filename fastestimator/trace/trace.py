@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import pdb
 import time
 
 import numpy as np
+
+from fastestimator.util.util import to_list
 
 
 class Trace:
@@ -58,8 +61,10 @@ class TrainEssential(Trace):
     """Essential training information for logging during training. Please don't add this trace into an estimator
     manually. An estimator will add it automatically.
     """
-    def __init__(self):
-        super().__init__(mode="train", log_names=["examples/sec", "progress", "total_time"])
+    def __init__(self, monitor_names):
+        self.monitor_names = to_list(monitor_names)
+        log_names = to_list(monitor_names.union(set(["examples/sec", "progress", "total_time", "total_steps"])))
+        super().__init__(mode="train", inputs=self.monitor_names, log_names=log_names)
         self.elapse_times = []
         self.num_example = 0
         self.time_start = None
@@ -67,6 +72,7 @@ class TrainEssential(Trace):
         self.system = None
 
     def on_begin(self):
+        self.system.add_buffer("total_steps", self.system.total_steps)
         self.train_start = time.perf_counter()
 
     def on_epoch_begin(self):
@@ -74,7 +80,9 @@ class TrainEssential(Trace):
 
     def on_batch_end(self, data):
         self.num_example += self.system.batch_size
-        if self.system.global_step % self.system.log_steps == self.system.log_steps - 1:
+        if self.system.global_step % self.system.log_steps == 0:
+            for idx, key in enumerate(self.monitor_names):
+                self.system.add_buffer(key, data[idx])
             self.elapse_times.append(time.perf_counter() - self.time_start)
             self.system.add_buffer("examples/sec", round(self.num_example / np.sum(self.elapse_times), 1))
             self.system.add_buffer("progress", "{:.1%}".format(self.system.global_step / self.system.total_steps))
@@ -89,22 +97,62 @@ class TrainEssential(Trace):
         self.system.add_buffer("total_time", "{} sec".format(round(time.perf_counter() - self.train_start, 2)))
 
 
+class EvalEssential(Trace):
+    def __init__(self, loss_keys):
+        self.loss_keys = to_list(loss_keys)
+        self._configure_lognames()
+        super().__init__(mode="eval", inputs=self.loss_keys, log_names=self.log_names)
+        self.eval_results = None
+        self.best_loss = None
+        self.since_best = 0
+
+    def _configure_lognames(self):
+        self.log_names = [elem for elem in self.loss_keys]
+        if len(self.loss_keys) == 1:
+            self.log_names.append("min_" + self.loss_keys[0])
+            self.log_names.append("since_best")
+
+    def on_epoch_begin(self):
+        self.eval_results = None
+
+    def on_batch_end(self, data):
+        if self.eval_results is None:
+            self.eval_results = dict((key, [data[idx]]) for idx, key in enumerate(self.loss_keys))
+        else:
+            for idx, key in enumerate(self.loss_keys):
+                self.eval_results[key].append(data[idx])
+
+    def on_epoch_end(self):
+        for key, value_list in self.eval_results.items():
+            self.system.add_buffer(key, np.mean(np.array(value_list), axis=0))
+        if len(self.loss_keys) == 1:
+            loss_name = self.loss_keys[0]
+            current_loss = self.system.read_buffer(loss_name)
+            if self.best_loss is None or current_loss < self.best_loss:
+                self.best_loss = current_loss
+                self.since_best = 0
+            else:
+                self.since_best += 1
+            self.system.add_buffer("min_" + loss_name, self.best_loss)
+            self.system.add_buffer("since_best", self.since_best)
+
+
 class Logger(Trace):
     """Trace that prints log, please don't add this trace into an estimator manually.
 
     Args:
-        monitor_names (set): set of keys to print from system buffer
+        log_names (set): set of keys to print from system buffer
     """
-    def __init__(self, monitor_names):
+    def __init__(self, log_names):
         super().__init__()
-        self.monitor_names = monitor_names
+        self.log_names = log_names
         self.system = None
 
     def on_begin(self):
         self._print_message("FastEstimator-Start: step: {}; ".format(self.system.global_step))
 
     def on_batch_end(self, data):
-        if self.system.mode == "train" and self.system.global_step % self.system.log_steps == self.system.log_steps - 1:
+        if self.system.mode == "train" and self.system.global_step % self.system.log_steps == 0:
             self._print_message("FastEstimator-Train: step: {}; ".format(self.system.global_step))
 
     def on_epoch_end(self):
@@ -119,7 +167,7 @@ class Logger(Trace):
         if log_epoch:
             log_message += "epoch: {}; ".format(self.system.epoch_idx)
         for key, val in self.system.buffer.items():
-            if key in self.monitor_names:
+            if key in self.log_names:
                 if hasattr(val, "numpy"):
                     val = val.numpy()
                 if isinstance(val, np.ndarray):

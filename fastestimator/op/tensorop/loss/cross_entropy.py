@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 from fastestimator.backend.cross_entropy import cross_entropy
+from fastestimator.backend.reduce_loss import reduce_loss
 from fastestimator.op.op import TensorOp
 
 
@@ -21,14 +22,19 @@ class CrossEntropy(TensorOp):
 
     Args:
         inputs: A tuple or list like: [<y_pred>, <y_true>]
-        outputs: key to store the computed loss value (not required under normal use cases)
-        mode: 'train', 'eval', 'test', or None
+        outputs: key to store the computed loss value
+        mode: 'train', 'eval' or None
+        apply_softmax: whether to apply softmax to y_pred. Defaults to False.
+        average_loss: whether to average the element-wise loss after the Loss Op
     """
-    def __init__(self, inputs=None, outputs=None, mode=None, apply_softmax=False):
-        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+    def __init__(self, inputs=None, outputs=None, mode=None, apply_softmax=False, average_loss=True):
         self.apply_softmax = apply_softmax
+        self.average_loss = average_loss
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
 
     def forward(self, data, state):
         y_pred, y_true = data
         loss = cross_entropy(y_pred, y_true, apply_softmax=self.apply_softmax)
+        if self.average_loss:
+            loss = reduce_loss(loss)
         return loss
