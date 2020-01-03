@@ -143,9 +143,10 @@ class Logger(Trace):
     Args:
         log_names (set): set of keys to print from system buffer
     """
-    def __init__(self, log_names):
+    def __init__(self, log_names, loss_names):
         super().__init__()
         self.log_names = log_names
+        self.loss_names = loss_names
         self.system = None
 
     def on_begin(self):
@@ -170,6 +171,8 @@ class Logger(Trace):
             if key in self.log_names:
                 if hasattr(val, "numpy"):
                     val = val.numpy()
+                if key in self.loss_names:
+                    val = round(val, 7)
                 if isinstance(val, np.ndarray):
                     log_message += "\n{}:\n{};".format(key, np.array2string(val, separator=','))
                 else:

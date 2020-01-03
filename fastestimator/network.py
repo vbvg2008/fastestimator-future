@@ -55,7 +55,6 @@ class Network:
         Returns:
             dictionary containing the predictions of current epoch
         """
-        batch = ChainMap({}, batch)
         ops = get_op_from_mode(self.ops, state["mode"])
         if self.framework == "tensorflow":
             prediction = self._forward_tensorflow(batch, state, ops, to_list(self.exported_keys))
@@ -71,8 +70,9 @@ class Network:
             prediction[key] = batch[key]
         return prediction
 
-    # @tf.function
+    @tf.function
     def _forward_tensorflow(self, batch, state, ops, exported_keys):
+        batch = ChainMap({}, batch)
         prediction = {}
         mode = state["mode"]
         # use gradient tape for tensorflow train, otherwise use a dummy tape

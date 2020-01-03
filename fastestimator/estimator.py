@@ -65,7 +65,7 @@ class Estimator:
         if isinstance(self.pipeline.train_data, tf.data.Dataset):
             assert self.steps_per_epoch, "must provide steps_per_epoch expicity with tensorflow Dataset"
         elif self.steps_per_epoch is None:
-            self.steps_per_epoch = len(self.pipeline)
+            self.steps_per_epoch = len(self.pipeline.train_data)
         self.system.total_steps = self.epochs * self.steps_per_epoch
 
     def _prepare_network(self):
@@ -101,7 +101,7 @@ class Estimator:
         for trace in self.traces:
             self.trace_inputs = self.trace_inputs.union(set(filter(None, to_list(trace.inputs))))
             self.monitor_names = self.monitor_names.union(set(filter(None, to_list(trace.log_names))))
-        self.traces.append(Logger(self.monitor_names))
+        self.traces.append(Logger(log_names=self.monitor_names, loss_names=loss_keys))
 
     def _initialize_loss_keys(self):
         loss_keys = set()
