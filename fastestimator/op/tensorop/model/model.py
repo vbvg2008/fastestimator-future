@@ -15,7 +15,6 @@
 from fastestimator.op.op import TensorOp
 from fastestimator.backend.feed_forward import feed_forward
 
-
 class ModelOp(TensorOp):
     """This class represents the Model operator that defines String keys for storing batch data and predictions
 

@@ -174,7 +174,7 @@ class Logger(Trace):
             if key in self.log_names:
                 val = to_number(val)
                 if key in self.loss_names:
-                    val = round(val, 7)
+                    val = np.round(val, decimals=7)
                 if isinstance(val, np.ndarray):
                     log_message += "\n{}:\n{};".format(key, np.array2string(val, separator=','))
                 else:

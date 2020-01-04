@@ -1,5 +1,7 @@
 from fastestimator.trace.trace import Trace
+from fastestimator.backend.to_number import to_number
 import numpy as np
+import pdb
 
 class Accuracy(Trace):
     def __init__(self, true_key, pred_key, log_names="accuracy"):
@@ -12,7 +14,7 @@ class Accuracy(Trace):
         self.correct = 0
     
     def on_batch_end(self, data):
-        y_true, y_pred = np.array(data[0]), np.array(data[1])
+        y_true, y_pred = to_number(data[0]), to_number(data[1])
         if y_pred.shape[-1] == 1:
             label_pred = np.round(y_pred)
         else:

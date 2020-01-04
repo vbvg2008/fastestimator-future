@@ -13,5 +13,6 @@ def update_model(model, loss, tape=None):
     elif isinstance(model, torch.nn.Module):
         loss.backward()
         model.optimizer.step()
+        model.optimizer.zero_grad()
     else:
         raise ValueError("Unrecognized model instance {}".format(type(model)))

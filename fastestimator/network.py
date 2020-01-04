@@ -64,8 +64,10 @@ class Network:
 
     def _forward_pytorch(self, batch, state, ops, exported_keys):
         prediction = {}
+        mode = state["mode"]
         state['tape'] = None
-        self._forward(batch, state, ops)
+        with torch.no_grad() if mode != "train" else NonContext():
+            self._forward(batch, state, ops)
         for key in exported_keys:
             prediction[key] = batch[key]
         return prediction
@@ -166,6 +168,7 @@ def _fe_compile(model, optimizer):
         assert isinstance(optimizer, tf.optimizers.Optimizer)
     else:
         assert isinstance(optimizer, torch.optim.Optimizer)
+        optimizer.zero_grad()
     model.optimizer = optimizer
     model.fe_compiled = True
     return model
