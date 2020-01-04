@@ -16,7 +16,10 @@ import pdb
 import time
 
 import numpy as np
+import tensorflow as tf
+import torch
 
+from fastestimator.backend.to_number import to_number
 from fastestimator.util.util import to_list
 
 
@@ -169,8 +172,7 @@ class Logger(Trace):
             log_message += "epoch: {}; ".format(self.system.epoch_idx)
         for key, val in self.system.buffer.items():
             if key in self.log_names:
-                if hasattr(val, "numpy"):
-                    val = val.numpy()
+                val = to_number(val)
                 if key in self.loss_names:
                     val = round(val, 7)
                 if isinstance(val, np.ndarray):
