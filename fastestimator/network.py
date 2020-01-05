@@ -32,17 +32,29 @@ class Network:
     def __init__(self, ops):
         self.ops = to_list(ops)
         self.framework = None
+        self.device = None
+        self.model_list = []
         self.exported_keys = set()
         self.op_outputs = set()
+        self.op_inputs = set()
         self._initial_check()
 
     def _initial_check(self):
         self._check_model()
         self._check_ops()
+        self._check_device()
 
     def _check_ops(self):
         for op in self.ops:
             self.op_outputs = self.op_outputs.union(set(filter(None, to_list(op.outputs))))
+            self.op_inputs = self.op_inputs.union(set(filter(None, to_list(op.inputs))))
+
+    def _check_device(self):
+        if self.framework == "pytorch":
+            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            if self.device.type == "cuda":
+                for model in self.model_list:
+                    model.to(self.device)
 
     def prepare(self):
         pass
@@ -56,20 +68,35 @@ class Network:
             dictionary containing the predictions of current epoch
         """
         ops = get_op_from_mode(self.ops, state["mode"])
+        batch = self._get_network_inputs(batch)
         if self.framework == "tensorflow":
             prediction = self._forward_tensorflow(batch, state, ops, to_list(self.exported_keys))
         else:
             prediction = self._forward_pytorch(batch, state, ops, self.exported_keys)
         return prediction
 
+    def _get_network_inputs(self, batch):
+        #In order to prevent sending unwanted data to gpu, this function extracts pipeline data required by network
+        new_batch = {}
+        extracted_keys = set(batch.keys()).intersection(self.op_inputs)
+        for key in extracted_keys:
+            new_batch[key] = batch[key]
+        return new_batch
+
     def _forward_pytorch(self, batch, state, ops, exported_keys):
         prediction = {}
         mode = state["mode"]
         state['tape'] = None
+        if self.device.type == "cuda":
+            for key, val in batch.items():
+                batch[key] = val.to(self.device)
         with torch.no_grad() if mode != "train" else NonContext():
             self._forward(batch, state, ops)
         for key in exported_keys:
-            prediction[key] = batch[key]
+            value = batch[key]
+            if self.device.type == "cuda":
+                value = value.to("cpu")
+            prediction[key] = value
         return prediction
 
     @tf.function
@@ -95,6 +122,8 @@ class Network:
                     frameworks.append("tensorflow")
                 elif isinstance(op.model, torch.nn.Module):
                     frameworks.append("pytorch")
+                if op.model not in self.model_list:
+                    self.model_list.append(op.model)
         assert len(set(frameworks)) == 1, "please make sure either tensorflow or torch model is used in network"
         self.framework = frameworks.pop()
 
