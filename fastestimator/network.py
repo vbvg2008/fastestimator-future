@@ -137,19 +137,16 @@ class Network:
                 write_outputs_by_key(batch, data, op.outputs)
 
 
-def build(model_def, optimizer_def):
-    """build model instance in FastEstimator
+def build(model, optimizer):
+    """Associate model instance(s) with optimizer(s)
     Args:
-        model_def (function): function definition that returns tf.keras model or torch.nn.Module
-        optimizer_def (function, str): function definition that returns tf.
+        model (obj, list): model instances or list of model instances
+        optimizer (obj, list, str): optimizer instance/string or list of optimizer instance/string
     Returns:
         models: model(s) compiled by FastEstimator
     """
-    models = to_list(model_def())
-    if isinstance(optimizer_def, str):
-        optimizers = to_list(optimizer_def)
-    else:
-        optimizers = to_list(optimizer_def())
+    models = to_list(model)
+    optimizers = to_list(optimizer)
     assert len(models) == len(optimizers)
     for idx, (model, optimizer) in enumerate(zip(models, optimizers)):
         models[idx] = _fe_compile(model, optimizer)
@@ -169,16 +166,15 @@ def _fe_compile(model, optimizer):
 
     #optimizer auto complete
     if isinstance(optimizer, str):
-        optimizer_fn = {
-            "tensorflow": {
+        tf_optimizer_fn = {
                 'adadelta': tf.optimizers.Adadelta,
                 'adagrad': tf.optimizers.Adagrad,
                 'adam': tf.optimizers.Adam,
                 'adamax': tf.optimizers.Adamax,
                 'rmsprop': tf.optimizers.RMSprop,
                 'sgd': tf.optimizers.SGD
-            },
-            "pytorch": {
+            }
+        pytorch_optimizer_fn = {
                 'adadelta': torch.optim.Adadelta,
                 'adagrad': torch.optim.Adagrad,
                 'adam': torch.optim.Adam,
@@ -186,18 +182,18 @@ def _fe_compile(model, optimizer):
                 'rmsprop': torch.optim.RMSprop,
                 'sgd': torch.optim.SGD
             }
-        }
         if framework == "tensorflow":
-            optimizer = optimizer_fn["tensorflow"][optimizer]()
+            optimizer = tf_optimizer_fn[optimizer]()
         else:
-            optimizer = optimizer_fn["pytorch"][optimizer](params=model.parameters(), lr=0.001)
-
+            optimizer = pytorch_optimizer_fn[optimizer](params=model.parameters())
+    
     #optimizer instance check
     if framework == "tensorflow":
         assert isinstance(optimizer, tf.optimizers.Optimizer)
     else:
         assert isinstance(optimizer, torch.optim.Optimizer)
         optimizer.zero_grad()
+
     model.optimizer = optimizer
     model.fe_compiled = True
     return model
